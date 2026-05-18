@@ -549,6 +549,8 @@ async function cargarBusquedas() {
     var res = await fetch(N8N + '/listar-vacantes');
     var data = parseData(await res.text());
     var vacantes = obtenerArray(data).filter(function(v){ return v && v.puesto && v.puesto.trim(); });
+    var canceladas = getVacantesCanceladas();
+    vacantes = vacantes.filter(function(v){ return !canceladas.includes(v.puesto.trim()); });
     var unicos = {};
     vacantes.forEach(function(v){ var p = v.puesto.trim(); if(!unicos[p]) unicos[p] = v; });
     todasLasBusquedas = Object.values(unicos);
@@ -582,18 +584,23 @@ function renderBusquedas(lista) {
   }).join('');
 }
 
+function getVacantesCanceladas() {
+  try { return JSON.parse(localStorage.getItem('candis_canceladas') || '[]'); } catch(e){ return []; }
+}
+function guardarVacanteCancelada(puesto) {
+  try {
+    var canceladas = getVacantesCanceladas();
+    if (!canceladas.includes(puesto)) canceladas.push(puesto);
+    localStorage.setItem('candis_canceladas', JSON.stringify(canceladas));
+  } catch(e){}
+}
+
 function confirmarBorrarVacante(puesto) {
   document.getElementById('confirm-title').textContent = 'Cancelar busqueda';
-  document.getElementById('confirm-sub').textContent = 'Queres cancelar la busqueda "' + puesto + '"? Esta accion no se puede deshacer.';
+  document.getElementById('confirm-sub').textContent = 'Queres cancelar la busqueda "' + puesto + '"? No volvera a aparecer en tu lista.';
   document.getElementById('confirm-overlay').classList.add('visible');
-  document.getElementById('confirm-btn').onclick = async function(){
-    try {
-      await fetch(N8N + '/eliminar-vacante', {
-        method: 'POST',
-        headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({puesto: puesto})
-      });
-    } catch(e){}
+  document.getElementById('confirm-btn').onclick = function(){
+    guardarVacanteCancelada(puesto);
     todasLasBusquedas = todasLasBusquedas.filter(function(v){ return v.puesto.trim() !== puesto; });
     renderBusquedas(todasLasBusquedas);
     cerrarConfirm();
@@ -898,4 +905,3 @@ function copiar(id) {
 </script>
 </body>
 </html>
-
