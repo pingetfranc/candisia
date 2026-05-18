@@ -391,6 +391,15 @@ textarea{min-height:80px;}
       <div class="tabs"><button class="tab active" onclick="cambiarTab(this,'det-tab-ab')">Abiertas</button><button class="tab" onclick="cambiarTab(this,'det-tab-se')">Semiestructuradas</button><button class="tab" onclick="cambiarTab(this,'det-tab-es')">Estructuradas</button></div>
       <div class="tab-content active" id="det-tab-ab"></div><div class="tab-content" id="det-tab-se"></div><div class="tab-content" id="det-tab-es"></div>
     </div>
+    <!-- PLACA DETALLE -->
+    <div class="placa-section" id="det-placa-section" style="display:none">
+      <div class="resultado-label">Placa de la vacante</div>
+      <p style="font-size:13px;color:var(--text2);margin-bottom:12px;font-weight:500">Imagen generada con IA lista para compartir en redes.</p>
+      <div class="placa-btns">
+        <button class="btn-dl-placa" onclick="descargarPlacaDetalle()">Descargar imagen</button>
+      </div>
+      <div class="placa-preview" id="det-placa-preview"></div>
+    </div>
   </div>
   <div class="det-content" id="det-candidatos">
     <div id="candidatos-lista"></div>
@@ -467,8 +476,8 @@ textarea{min-height:80px;}
   </div>
 </div>
 
-<script>
-var N8N = 'https://primary-production-b6414.up.railway.app/webhook';
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script> = 'https://primary-production-b6414.up.railway.app/webhook';
 var USUARIOS = {
   'franco': { password: 'Candis2026!', nombre: 'Franco Pinget' },
   'reclutador1': { password: 'Candis2026!', nombre: 'Reclutador 1' },
@@ -675,6 +684,11 @@ async function verDetalle(puesto, fecha) {
     renderPreg('det-tab-ab', (d.preguntas_abiertas||'').split(' | ').filter(Boolean));
     renderPreg('det-tab-se', (d.preguntas_semiestructuradas||'').split(' | ').filter(Boolean));
     renderPreg('det-tab-es', (d.preguntas_estructuradas||'').split(' | ').filter(Boolean));
+    // Mostrar placa si hay imagen guardada
+    if (window._placaImageBase64 && d.puesto === datoVacante.puesto) {
+      document.getElementById('det-placa-section').style.display = 'block';
+      mostrarPlacaHTML('det-placa-preview', window._placaImageBase64, datoVacante);
+    }
   } catch(e) { document.getElementById('det-aviso').textContent = 'Error al cargar.'; }
   try {
     var res2 = await fetch(N8N + '/listar-candidatos?puesto=' + encodeURIComponent(puesto));
@@ -852,20 +866,7 @@ async function generarPlacasPreview() {
     var data = JSON.parse(text.replace(/^=+/, ''));
     if (data.image_base64) {
       window._placaImageBase64 = data.image_base64;
-      var canvas = await generarPlacaConTexto(data.image_base64);
-      window._placaFinal = canvas.toDataURL('image/png');
-      var img = document.createElement('img');
-      img.src = window._placaFinal;
-      img.style.cssText = 'max-width:240px;border-radius:12px;box-shadow:var(--shadow-hover);border:1.5px solid var(--border);';
-      var wrap = document.createElement('div');
-      wrap.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:8px;';
-      var lbl = document.createElement('div');
-      lbl.style.cssText = 'font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px;';
-      lbl.textContent = 'Vista previa';
-      wrap.appendChild(img);
-      wrap.appendChild(lbl);
-      preview.innerHTML = '';
-      preview.appendChild(wrap);
+      mostrarPlacaHTML('placa-preview', data.image_base64, datoVacante);
     } else {
       preview.innerHTML = '<div style="color:var(--danger);font-size:13px;font-weight:600">No se pudo generar la imagen.</div>';
     }
@@ -874,130 +875,92 @@ async function generarPlacasPreview() {
   }
 }
 
-async function generarPlacaConTexto(base64) {
-  return new Promise(function(resolve) {
-    var W = 540, H = 960;
-    var canvas = document.createElement('canvas');
-    canvas.width = W; canvas.height = H;
-    var ctx = canvas.getContext('2d');
+function mostrarPlacaHTML(containerId, base64, datos) {
+  var container = document.getElementById(containerId);
+  var puesto = datos.puesto || '';
+  var ubicacion = [datos.ciudad, datos.provincia, datos.pais].filter(Boolean).join(', ') || 'Argentina';
+  var modalidad = datos.modalidad || 'Presencial';
+  var jornada = datos.jornada || 'Full Time';
+  var experiencia = datos.experiencia || '';
+  var comps = (datos.competencias_generales || '').split(', ').filter(Boolean).slice(0, 3);
 
-    var img = new Image();
-    img.onload = function() {
-      // Fondo imagen
-      ctx.drawImage(img, 0, 0, W, H);
+  var tagsHtml = comps.map(function(c) {
+    return '<span style="background:rgba(90,138,45,0.85);color:white;border-radius:12px;padding:4px 12px;font-size:11px;font-weight:700;margin:3px;">' + c + '</span>';
+  }).join('');
 
-      // Overlay oscuro en la mitad inferior
-      var grad = ctx.createLinearGradient(0, H*0.35, 0, H);
-      grad.addColorStop(0, 'rgba(0,0,0,0)');
-      grad.addColorStop(0.4, 'rgba(0,0,0,0.7)');
-      grad.addColorStop(1, 'rgba(0,0,0,0.92)');
-      ctx.fillStyle = grad;
-      ctx.fillRect(0, 0, W, H);
+  var placaHtml = '<div id="placa-render-' + containerId + '" style="width:320px;height:568px;position:relative;border-radius:12px;overflow:hidden;font-family:Arial,sans-serif;">' +
+    '<img src="data:image/webp;base64,' + base64 + '" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;">' +
+    '<div style="position:absolute;inset:0;background:linear-gradient(to bottom, rgba(0,0,0,0.3) 0%, rgba(0,0,0,0.1) 30%, rgba(0,0,0,0.75) 60%, rgba(0,0,0,0.95) 100%);"></div>' +
+    '<div style="position:absolute;top:0;left:0;right:0;background:#2d5a3d;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;">' +
+      '<span style="color:white;font-weight:900;font-size:16px;letter-spacing:1px;">CANDIS<span style="color:#a8d458;">IA</span></span>' +
+      '<span style="background:rgba(255,255,255,0.2);color:white;font-size:10px;font-weight:700;padding:3px 10px;border-radius:10px;letter-spacing:0.5px;">BUSQUEDA ACTIVA</span>' +
+    '</div>' +
+    '<div style="position:absolute;bottom:0;left:0;right:0;padding:20px 18px;">' +
+      '<div style="color:white;font-size:24px;font-weight:900;line-height:1.2;margin-bottom:10px;text-shadow:0 2px 4px rgba(0,0,0,0.5);">' + puesto + '</div>' +
+      '<div style="width:50px;height:3px;background:#a8d458;border-radius:2px;margin-bottom:12px;"></div>' +
+      '<div style="color:rgba(255,255,255,0.9);font-size:12px;margin-bottom:4px;">&#128205; ' + ubicacion + '</div>' +
+      '<div style="color:rgba(255,255,255,0.9);font-size:12px;margin-bottom:4px;">&#127970; ' + modalidad + ' &nbsp;·&nbsp; ' + jornada + '</div>' +
+      (experiencia ? '<div style="color:rgba(255,255,255,0.9);font-size:12px;margin-bottom:10px;">&#11088; Exp: ' + experiencia + '</div>' : '') +
+      (tagsHtml ? '<div style="display:flex;flex-wrap:wrap;margin-bottom:14px;">' + tagsHtml + '</div>' : '') +
+      '<div style="display:flex;align-items:center;justify-content:space-between;">' +
+        '<div style="color:rgba(255,255,255,0.7);font-size:11px;">candisia.com</div>' +
+        '<div style="background:white;border-radius:6px;padding:6px;width:52px;height:52px;display:flex;align-items:center;justify-content:center;">' +
+          generarQRSvg() +
+        '</div>' +
+      '</div>' +
+    '</div>' +
+  '</div>';
 
-      // Franja verde superior
-      ctx.fillStyle = '#2d5a3d';
-      ctx.fillRect(0, 0, W, 70);
-
-      // Logo
-      ctx.fillStyle = 'white';
-      ctx.font = 'bold 24px Georgia, serif';
-      ctx.textAlign = 'left';
-      ctx.fillText('CANDIS', 30, 46);
-      ctx.fillStyle = '#5a8a2d';
-      ctx.fillText('IA', 133, 46);
-
-      // Badge busqueda activa
-      ctx.fillStyle = '#5a8a2d';
-      ctx.beginPath();
-      ctx.roundRect(30, 90, 180, 30, 15);
-      ctx.fill();
-      ctx.fillStyle = 'white';
-      ctx.font = 'bold 13px Helvetica, Arial, sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText('BUSQUEDA ACTIVA', 120, 110);
-
-      // Nombre del puesto
-      ctx.fillStyle = 'white';
-      ctx.font = 'bold 44px Georgia, serif';
-      ctx.textAlign = 'left';
-      var puesto = datoVacante.puesto || 'Nombre del puesto';
-      var palabras = puesto.split(' ');
-      var linea1 = '', linea2 = '';
-      var mid = Math.ceil(palabras.length / 2);
-      linea1 = palabras.slice(0, mid).join(' ');
-      linea2 = palabras.slice(mid).join(' ');
-      ctx.fillText(linea1, 30, 580);
-      if (linea2) ctx.fillText(linea2, 30, 630);
-
-      // Línea acento
-      ctx.fillStyle = '#5a8a2d';
-      ctx.fillRect(30, linea2 ? 648 : 600, 80, 4);
-
-      // Info
-      var infoY = linea2 ? 690 : 640;
-      ctx.fillStyle = 'rgba(255,255,255,0.85)';
-      ctx.font = '18px Helvetica, Arial, sans-serif';
-      var ubicacion = [datoVacante.ciudad, datoVacante.pais].filter(Boolean).join(', ') || 'Argentina';
-      ctx.fillText('📍 ' + ubicacion, 30, infoY);
-      ctx.fillText('🏢 ' + (datoVacante.modalidad || 'Presencial') + '  ·  ' + (datoVacante.jornada || 'Full Time'), 30, infoY + 34);
-      if (datoVacante.experiencia) ctx.fillText('⭐ Exp: ' + datoVacante.experiencia, 30, infoY + 68);
-
-      // Competencias
-      var comps = (datoVacante.competencias_generales || '').split(', ').filter(Boolean).slice(0, 3);
-      if (comps.length) {
-        var tagY = infoY + 110;
-        var tagX = 30;
-        ctx.font = 'bold 13px Helvetica, Arial, sans-serif';
-        comps.forEach(function(comp) {
-          var tw = ctx.measureText(comp).width + 24;
-          ctx.fillStyle = 'rgba(90,138,45,0.8)';
-          ctx.beginPath();
-          ctx.roundRect(tagX, tagY - 18, tw, 26, 13);
-          ctx.fill();
-          ctx.fillStyle = 'white';
-          ctx.fillText(comp, tagX + 12, tagY);
-          tagX += tw + 10;
-          if (tagX > W - 80) { tagX = 30; tagY += 34; }
-        });
-      }
-
-      // QR falso
-      var qrX = W - 120, qrY = H - 160, qrS = 100;
-      ctx.fillStyle = 'white';
-      ctx.beginPath();
-      ctx.roundRect(qrX - 10, qrY - 10, qrS + 20, qrS + 20, 8);
-      ctx.fill();
-      // Dibujar QR simple
-      var cell = Math.floor(qrS / 7);
-      var pattern = [[1,1,1,0,1,1,1],[1,0,1,0,1,0,1],[1,1,1,0,1,1,1],[0,0,0,0,0,1,0],[1,1,1,0,1,0,1],[0,1,0,0,1,0,1],[1,0,1,0,1,1,1]];
-      pattern.forEach(function(row, r) {
-        row.forEach(function(v, c) {
-          if (v) {
-            ctx.fillStyle = '#2d5a3d';
-            ctx.fillRect(qrX + c*cell, qrY + r*cell, cell-1, cell-1);
-          }
-        });
-      });
-      ctx.fillStyle = 'rgba(255,255,255,0.7)';
-      ctx.font = '12px Helvetica, Arial, sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText('Escanea y postulate', W/2, H - 40);
-      ctx.fillStyle = '#5a8a2d';
-      ctx.font = 'bold 13px Helvetica, Arial, sans-serif';
-      ctx.fillText('candisia.com', W/2, H - 20);
-
-      resolve(canvas);
-    };
-    img.src = 'data:image/webp;base64,' + base64;
-  });
+  var wrap = document.createElement('div');
+  wrap.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:10px;';
+  wrap.innerHTML = placaHtml;
+  var lbl = document.createElement('div');
+  lbl.style.cssText = 'font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px;';
+  lbl.textContent = 'Vista previa';
+  wrap.appendChild(lbl);
+  container.innerHTML = '';
+  container.appendChild(wrap);
 }
 
-function descargarPlaca() {
-  if (!window._placaFinal) { alert('Primero genera la vacante para obtener la imagen.'); return; }
-  var link = document.createElement('a');
-  link.download = 'CandisIA_' + (datoVacante.puesto || 'vacante').replace(/\s+/g,'_') + '.png';
-  link.href = window._placaFinal;
-  link.click();
+function generarQRSvg() {
+  var pattern = [[1,1,1,0,1,1,1],[1,0,1,0,1,0,1],[1,1,1,0,1,1,1],[0,0,0,0,0,1,0],[1,1,1,0,1,0,1],[0,1,0,0,1,0,1],[1,0,1,0,1,1,1]];
+  var cell = 5;
+  var svgParts = ['<svg width="40" height="40" xmlns="http://www.w3.org/2000/svg">'];
+  pattern.forEach(function(row, r) {
+    row.forEach(function(v, c) {
+      if (v) svgParts.push('<rect x="' + (c*cell+1) + '" y="' + (r*cell+1) + '" width="' + (cell-1) + '" height="' + (cell-1) + '" fill="#2d5a3d"/>');
+    });
+  });
+  svgParts.push('</svg>');
+  return svgParts.join('');
+}
+
+async function descargarPlaca() {
+  var placaEl = document.getElementById('placa-render-placa-preview');
+  if (!placaEl) { alert('Primero genera la vacante.'); return; }
+  await descargarElemento(placaEl, datoVacante.puesto);
+}
+
+async function descargarPlacaDetalle() {
+  var placaEl = document.getElementById('placa-render-det-placa-preview');
+  if (!placaEl) { alert('No hay placa disponible.'); return; }
+  await descargarElemento(placaEl, document.getElementById('det-titulo').textContent);
+}
+
+async function descargarElemento(el, nombre) {
+  if (typeof html2canvas === 'undefined') {
+    alert('Cargando herramienta de descarga... intenta en unos segundos.');
+    return;
+  }
+  try {
+    var canvas = await html2canvas(el, { scale: 2, useCORS: true, allowTaint: true });
+    var link = document.createElement('a');
+    link.download = 'CandisIA_' + (nombre || 'vacante').replace(/\s+/g,'_') + '.png';
+    link.href = canvas.toDataURL('image/png');
+    link.click();
+  } catch(e) {
+    alert('Error al descargar: ' + e.message);
+  }
 }
 
 // HELPERS
