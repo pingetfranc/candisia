@@ -852,14 +852,16 @@ async function generarPlacasPreview() {
     var data = JSON.parse(text.replace(/^=+/, ''));
     if (data.image_base64) {
       window._placaImageBase64 = data.image_base64;
+      var canvas = await generarPlacaConTexto(data.image_base64);
+      window._placaFinal = canvas.toDataURL('image/png');
       var img = document.createElement('img');
-      img.src = 'data:image/webp;base64,' + data.image_base64;
-      img.style.cssText = 'max-width:220px;border-radius:12px;box-shadow:var(--shadow-hover);border:1.5px solid var(--border);';
+      img.src = window._placaFinal;
+      img.style.cssText = 'max-width:240px;border-radius:12px;box-shadow:var(--shadow-hover);border:1.5px solid var(--border);';
       var wrap = document.createElement('div');
       wrap.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:8px;';
       var lbl = document.createElement('div');
       lbl.style.cssText = 'font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px;';
-      lbl.textContent = 'Imagen generada con IA';
+      lbl.textContent = 'Vista previa';
       wrap.appendChild(img);
       wrap.appendChild(lbl);
       preview.innerHTML = '';
@@ -871,11 +873,130 @@ async function generarPlacasPreview() {
     preview.innerHTML = '<div style="color:var(--danger);font-size:13px;font-weight:600">Error: ' + e.message + '</div>';
   }
 }
+
+async function generarPlacaConTexto(base64) {
+  return new Promise(function(resolve) {
+    var W = 540, H = 960;
+    var canvas = document.createElement('canvas');
+    canvas.width = W; canvas.height = H;
+    var ctx = canvas.getContext('2d');
+
+    var img = new Image();
+    img.onload = function() {
+      // Fondo imagen
+      ctx.drawImage(img, 0, 0, W, H);
+
+      // Overlay oscuro en la mitad inferior
+      var grad = ctx.createLinearGradient(0, H*0.35, 0, H);
+      grad.addColorStop(0, 'rgba(0,0,0,0)');
+      grad.addColorStop(0.4, 'rgba(0,0,0,0.7)');
+      grad.addColorStop(1, 'rgba(0,0,0,0.92)');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, W, H);
+
+      // Franja verde superior
+      ctx.fillStyle = '#2d5a3d';
+      ctx.fillRect(0, 0, W, 70);
+
+      // Logo
+      ctx.fillStyle = 'white';
+      ctx.font = 'bold 24px Georgia, serif';
+      ctx.textAlign = 'left';
+      ctx.fillText('CANDIS', 30, 46);
+      ctx.fillStyle = '#5a8a2d';
+      ctx.fillText('IA', 133, 46);
+
+      // Badge busqueda activa
+      ctx.fillStyle = '#5a8a2d';
+      ctx.beginPath();
+      ctx.roundRect(30, 90, 180, 30, 15);
+      ctx.fill();
+      ctx.fillStyle = 'white';
+      ctx.font = 'bold 13px Helvetica, Arial, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('BUSQUEDA ACTIVA', 120, 110);
+
+      // Nombre del puesto
+      ctx.fillStyle = 'white';
+      ctx.font = 'bold 44px Georgia, serif';
+      ctx.textAlign = 'left';
+      var puesto = datoVacante.puesto || 'Nombre del puesto';
+      var palabras = puesto.split(' ');
+      var linea1 = '', linea2 = '';
+      var mid = Math.ceil(palabras.length / 2);
+      linea1 = palabras.slice(0, mid).join(' ');
+      linea2 = palabras.slice(mid).join(' ');
+      ctx.fillText(linea1, 30, 580);
+      if (linea2) ctx.fillText(linea2, 30, 630);
+
+      // Línea acento
+      ctx.fillStyle = '#5a8a2d';
+      ctx.fillRect(30, linea2 ? 648 : 600, 80, 4);
+
+      // Info
+      var infoY = linea2 ? 690 : 640;
+      ctx.fillStyle = 'rgba(255,255,255,0.85)';
+      ctx.font = '18px Helvetica, Arial, sans-serif';
+      var ubicacion = [datoVacante.ciudad, datoVacante.pais].filter(Boolean).join(', ') || 'Argentina';
+      ctx.fillText('📍 ' + ubicacion, 30, infoY);
+      ctx.fillText('🏢 ' + (datoVacante.modalidad || 'Presencial') + '  ·  ' + (datoVacante.jornada || 'Full Time'), 30, infoY + 34);
+      if (datoVacante.experiencia) ctx.fillText('⭐ Exp: ' + datoVacante.experiencia, 30, infoY + 68);
+
+      // Competencias
+      var comps = (datoVacante.competencias_generales || '').split(', ').filter(Boolean).slice(0, 3);
+      if (comps.length) {
+        var tagY = infoY + 110;
+        var tagX = 30;
+        ctx.font = 'bold 13px Helvetica, Arial, sans-serif';
+        comps.forEach(function(comp) {
+          var tw = ctx.measureText(comp).width + 24;
+          ctx.fillStyle = 'rgba(90,138,45,0.8)';
+          ctx.beginPath();
+          ctx.roundRect(tagX, tagY - 18, tw, 26, 13);
+          ctx.fill();
+          ctx.fillStyle = 'white';
+          ctx.fillText(comp, tagX + 12, tagY);
+          tagX += tw + 10;
+          if (tagX > W - 80) { tagX = 30; tagY += 34; }
+        });
+      }
+
+      // QR falso
+      var qrX = W - 120, qrY = H - 160, qrS = 100;
+      ctx.fillStyle = 'white';
+      ctx.beginPath();
+      ctx.roundRect(qrX - 10, qrY - 10, qrS + 20, qrS + 20, 8);
+      ctx.fill();
+      // Dibujar QR simple
+      var cell = Math.floor(qrS / 7);
+      var pattern = [[1,1,1,0,1,1,1],[1,0,1,0,1,0,1],[1,1,1,0,1,1,1],[0,0,0,0,0,1,0],[1,1,1,0,1,0,1],[0,1,0,0,1,0,1],[1,0,1,0,1,1,1]];
+      pattern.forEach(function(row, r) {
+        row.forEach(function(v, c) {
+          if (v) {
+            ctx.fillStyle = '#2d5a3d';
+            ctx.fillRect(qrX + c*cell, qrY + r*cell, cell-1, cell-1);
+          }
+        });
+      });
+      ctx.fillStyle = 'rgba(255,255,255,0.7)';
+      ctx.font = '12px Helvetica, Arial, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('Escanea y postulate', W/2, H - 40);
+      ctx.fillStyle = '#5a8a2d';
+      ctx.font = 'bold 13px Helvetica, Arial, sans-serif';
+      ctx.fillText('candisia.com', W/2, H - 20);
+
+      resolve(canvas);
+    };
+    img.src = 'data:image/webp;base64,' + base64;
+  });
+}
+
 function descargarPlaca() {
-  if (!window._placaImageBase64) { alert('Primero genera la vacante para obtener la imagen.'); return; }
+  if (!window._placaFinal) { alert('Primero genera la vacante para obtener la imagen.'); return; }
   var link = document.createElement('a');
-  link.download = 'CandisIA_' + (datoVacante.puesto || 'vacante').replace(/\s+/g,'_') + '.webp';
-  link.href = 'data:image/webp;base64,' + window._placaImageBase64;
+  link.download = 'CandisIA_' + (datoVacante.puesto || 'vacante').replace(/\s+/g,'_') + '.png';
+  link.href = window._placaFinal;
   link.click();
 }
 
