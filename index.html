@@ -685,10 +685,23 @@ async function verDetalle(puesto, fecha) {
     renderPreg('det-tab-ab', (d.preguntas_abiertas||'').split(' | ').filter(Boolean));
     renderPreg('det-tab-se', (d.preguntas_semiestructuradas||'').split(' | ').filter(Boolean));
     renderPreg('det-tab-es', (d.preguntas_estructuradas||'').split(' | ').filter(Boolean));
-    // Mostrar placa si hay imagen guardada
-    if (window._placaImageBase64 && d.puesto === datoVacante.puesto) {
+    // Mostrar placa desde Google Sheets
+    if (d.imagen_placa && d.imagen_placa.trim()) {
+      var datosVacante = {
+        puesto: puesto,
+        ciudad: d.ciudad || '',
+        provincia: d.provincia || '',
+        pais: d.pais || '',
+        modalidad: d.modalidad || '',
+        jornada: d.jornada || '',
+        experiencia: d.experiencia || '',
+        competencias_generales: d.competencias_generales || ''
+      };
+      var base64 = d.imagen_placa.replace('data:image/webp;base64,', '');
       document.getElementById('det-placa-section').style.display = 'block';
-      mostrarPlacaHTML('det-placa-preview', window._placaImageBase64, datoVacante);
+      mostrarPlacaHTML('det-placa-preview', base64, datosVacante);
+    } else {
+      document.getElementById('det-placa-section').style.display = 'none';
     }
   } catch(e) { document.getElementById('det-aviso').textContent = 'Error al cargar.'; }
   try {
@@ -990,3 +1003,4 @@ function copiar(id) {
 </script>
 </body>
 </html>
+
