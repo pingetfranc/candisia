@@ -937,47 +937,6 @@ function mostrarPlacaHTML(containerId, base64, datos) {
   var imagenSrc = 'data:image/webp;base64,' + base64;
   mostrarPlacaHTMLconURL(containerId, imagenSrc, datos);
 }
-  var container = document.getElementById(containerId);
-  var puesto = datos.puesto || '';
-  var ubicacion = [datos.ciudad, datos.provincia, datos.pais].filter(Boolean).join(', ') || 'Argentina';
-  var modalidad = datos.modalidad || 'Presencial';
-  var jornada = datos.jornada || 'Full Time';
-  var experiencia = datos.experiencia || '';
-  var comps = (datos.competencias_generales || '').split(', ').filter(Boolean).slice(0, 3);
-
-  var tagsHtml = comps.map(function(c) {
-    return '<span style="background:rgba(90,138,45,0.85);color:white;border-radius:12px;padding:4px 12px;font-size:11px;font-weight:700;margin:3px;">' + c + '</span>';
-  }).join('');
-
-  var placaHtml = '<div id="placa-render-' + containerId + '" style="width:320px;height:568px;position:relative;border-radius:12px;overflow:hidden;font-family:Arial,sans-serif;">' +
-    '<img src="data:image/webp;base64,' + base64 + '" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;">' +
-    '<div style="position:absolute;inset:0;background:linear-gradient(to bottom, rgba(0,0,0,0.3) 0%, rgba(0,0,0,0.1) 30%, rgba(0,0,0,0.75) 60%, rgba(0,0,0,0.95) 100%);"></div>' +
-    '<div style="position:absolute;top:0;left:0;right:0;background:#2d5a3d;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;">' +
-      '<span style="color:white;font-weight:900;font-size:16px;letter-spacing:1px;">CANDIS<span style="color:#a8d458;">IA</span></span>' +
-      '<span style="background:rgba(255,255,255,0.2);color:white;font-size:10px;font-weight:700;padding:3px 10px;border-radius:10px;letter-spacing:0.5px;">BUSQUEDA ACTIVA</span>' +
-    '</div>' +
-    '<div style="position:absolute;bottom:0;left:0;right:0;padding:20px 18px;">' +
-      '<div style="color:white;font-size:24px;font-weight:900;line-height:1.2;margin-bottom:10px;text-shadow:0 2px 4px rgba(0,0,0,0.5);">' + puesto + '</div>' +
-      '<div style="width:50px;height:3px;background:#a8d458;border-radius:2px;margin-bottom:12px;"></div>' +
-      '<div style="color:rgba(255,255,255,0.9);font-size:12px;margin-bottom:4px;">&#128205; ' + ubicacion + '</div>' +
-      '<div style="color:rgba(255,255,255,0.9);font-size:12px;margin-bottom:4px;">&#127970; ' + modalidad + ' &nbsp;·&nbsp; ' + jornada + '</div>' +
-      (experiencia ? '<div style="color:rgba(255,255,255,0.9);font-size:12px;margin-bottom:10px;">&#11088; Exp: ' + experiencia + '</div>' : '') +
-      (tagsHtml ? '<div style="display:flex;flex-wrap:wrap;margin-bottom:14px;">' + tagsHtml + '</div>' : '') +
-      '<div style="display:flex;align-items:center;justify-content:space-between;">' +
-        '<div style="color:rgba(255,255,255,0.7);font-size:11px;">candisia.com</div>' +
-        '<div style="background:white;border-radius:6px;padding:6px;width:52px;height:52px;display:flex;align-items:center;justify-content:center;">' +
-          generarQRSvg() +
-        '</div>' +
-      '</div>' +
-    '</div>' +
-  '</div>';
-
-  var wrap = document.createElement('div');
-  wrap.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:10px;';
-  wrap.innerHTML = placaHtml;
-  var lbl = document.createElement('div');
-  lbl.style.cssText = 'font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px;';
-  lbl.textContent = 'Vista previa';
   wrap.appendChild(lbl);
   container.innerHTML = '';
   container.appendChild(wrap);
