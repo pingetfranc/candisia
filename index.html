@@ -937,10 +937,6 @@ function mostrarPlacaHTML(containerId, base64, datos) {
   var imagenSrc = 'data:image/webp;base64,' + base64;
   mostrarPlacaHTMLconURL(containerId, imagenSrc, datos);
 }
-  wrap.appendChild(lbl);
-  container.innerHTML = '';
-  container.appendChild(wrap);
-}
 
 function generarQRSvg() {
   var pattern = [[1,1,1,0,1,1,1],[1,0,1,0,1,0,1],[1,1,1,0,1,1,1],[0,0,0,0,0,1,0],[1,1,1,0,1,0,1],[0,1,0,0,1,0,1],[1,0,1,0,1,1,1]];
