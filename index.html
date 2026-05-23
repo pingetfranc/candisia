@@ -953,16 +953,27 @@ async function descargarPlaca() {
   await descargarElemento(placaEl, datoVacante.puesto);
 }
 
+var placaCache = {};
+
 async function generarPlacaDetalle(datos) {
+  var puesto = datos.puesto || '';
+  
+  // Si ya está en caché, mostrar sin generar nueva
+  if (placaCache[puesto]) {
+    mostrarPlacaHTML('det-placa-preview', placaCache[puesto], datos);
+    return;
+  }
+
   try {
     var res = await fetch(N8N + '/generar-placa', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({puesto: datos.puesto, ciudad: datos.ciudad || 'Argentina'})
+      body: JSON.stringify({puesto: puesto, ciudad: datos.ciudad || 'Argentina'})
     });
     var text = await res.text();
     var data = JSON.parse(text.replace(/^=+/, ''));
     if (data.image_base64) {
+      placaCache[puesto] = data.image_base64;
       mostrarPlacaHTML('det-placa-preview', data.image_base64, datos);
     } else {
       document.getElementById('det-placa-preview').innerHTML = '<div style="color:var(--danger);font-size:13px;font-weight:600">No se pudo generar la placa.</div>';
