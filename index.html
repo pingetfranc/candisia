@@ -953,6 +953,25 @@ async function descargarPlaca() {
   await descargarElemento(placaEl, datoVacante.puesto);
 }
 
+async function generarPlacaDetalle(datos) {
+  try {
+    var res = await fetch(N8N + '/generar-placa', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({puesto: datos.puesto, ciudad: datos.ciudad || 'Argentina'})
+    });
+    var text = await res.text();
+    var data = JSON.parse(text.replace(/^=+/, ''));
+    if (data.image_base64) {
+      mostrarPlacaHTML('det-placa-preview', data.image_base64, datos);
+    } else {
+      document.getElementById('det-placa-preview').innerHTML = '<div style="color:var(--danger);font-size:13px;font-weight:600">No se pudo generar la placa.</div>';
+    }
+  } catch(e) {
+    document.getElementById('det-placa-preview').innerHTML = '<div style="color:var(--danger);font-size:13px;font-weight:600">Error al generar la placa.</div>';
+  }
+}
+
 async function descargarPlacaDetalle() {
   var placaEl = document.getElementById('placa-render-det-placa-preview');
   if (!placaEl) { alert('No hay placa disponible.'); return; }
