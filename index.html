@@ -402,6 +402,9 @@ textarea{min-height:80px;}
     </div>
   </div>
   <div class="det-content" id="det-candidatos">
+    <div style="margin-bottom:16px;">
+      <button class="btn-primary" style="width:auto;padding:10px 20px;" onclick="abrirAgregarCandidato()">+ Agregar candidato</button>
+    </div>
     <div id="candidatos-lista"></div>
     <div id="charts-section" style="display:none">
       <div style="font-family:'Playfair Display',serif;font-size:22px;font-weight:700;margin-bottom:16px;margin-top:28px;color:var(--text)">Comparativo de candidatos</div>
@@ -464,6 +467,24 @@ textarea{min-height:80px;}
   </div>
 </div>
 
+<!-- MODAL AGREGAR CANDIDATO -->
+<div class="modal-overlay" id="candidato-overlay" onclick="if(event.target===this)cerrarAgregarCandidato()">
+  <div class="evento-modal">
+    <h3>Agregar candidato</h3>
+    <div class="evento-modal-sub" id="candidato-vacante-sub"></div>
+    <div class="ev-field"><label>Nombre completo *</label><input type="text" id="cand-nombre" placeholder="Ej: Juan Pérez"></div>
+    <div class="ev-field"><label>Email</label><input type="email" id="cand-email" placeholder="juan@email.com"></div>
+    <div class="ev-field"><label>Telefono</label><input type="text" id="cand-tel" placeholder="+54 11 1234-5678"></div>
+    <div class="ev-field"><label>Notas</label><textarea id="cand-notas" rows="2" placeholder="Observaciones del candidato..."></textarea></div>
+    <div class="msg msg-error" id="cand-error"></div>
+    <div class="msg msg-ok" id="cand-ok"></div>
+    <div class="ev-actions">
+      <button class="btn-ev-cancel" onclick="cerrarAgregarCandidato()">Cancelar</button>
+      <button class="btn-ev-ok" id="btn-cand-ok" onclick="guardarCandidatoManual()">Agregar</button>
+    </div>
+  </div>
+</div>
+
 <!-- CONFIRM -->
 <div class="confirm-overlay" id="confirm-overlay">
   <div class="confirm-box">
@@ -484,7 +505,7 @@ var USUARIOS = {
   'reclutador1': { password: 'Candis2026!', nombre: 'Reclutador 1' },
   'reclutador2': { password: 'Candis2026!', nombre: 'Reclutador 2' },
 };
-var ESTADOS = ['Primer contacto','Entrevista','Presentado','Avanzado','Cerrado'];
+var ESTADOS = ['Preseleccion','Primer contacto','Entrevista','Presentado','Avanzado','Cerrado'];
 var MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 var DIAS = ['Dom','Lun','Mar','Mie','Jue','Vie','Sab'];
 var usuarioActual = null;
@@ -776,6 +797,73 @@ function verCandidato(jsonStr) {
   document.getElementById('modal').classList.add('visible');
 }
 function cerrarModal(e){ if(!e||e.target===document.getElementById('modal')) document.getElementById('modal').classList.remove('visible'); }
+
+// CANDIDATO MANUAL
+var puestoActual = '';
+
+function abrirAgregarCandidato() {
+  puestoActual = document.getElementById('det-titulo').textContent;
+  document.getElementById('candidato-vacante-sub').textContent = 'Vacante: ' + puestoActual;
+  document.getElementById('cand-nombre').value = '';
+  document.getElementById('cand-email').value = '';
+  document.getElementById('cand-tel').value = '';
+  document.getElementById('cand-notas').value = '';
+  document.getElementById('cand-error').style.display = 'none';
+  document.getElementById('cand-ok').style.display = 'none';
+  document.getElementById('candidato-overlay').classList.add('visible');
+}
+
+function cerrarAgregarCandidato() {
+  document.getElementById('candidato-overlay').classList.remove('visible');
+}
+
+async function guardarCandidatoManual() {
+  var nombre = document.getElementById('cand-nombre').value.trim();
+  var email = document.getElementById('cand-email').value.trim();
+  var tel = document.getElementById('cand-tel').value.trim();
+  var notas = document.getElementById('cand-notas').value.trim();
+  var errEl = document.getElementById('cand-error');
+  var okEl = document.getElementById('cand-ok');
+  var btn = document.getElementById('btn-cand-ok');
+
+  errEl.style.display = 'none'; okEl.style.display = 'none';
+  if (!nombre) { errEl.textContent = 'El nombre es obligatorio.'; errEl.style.display = 'block'; return; }
+
+  btn.disabled = true; btn.textContent = 'Guardando...';
+
+  try {
+    var res = await fetch(N8N + '/agregar-candidato', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        id_candidato: String(Date.now()),
+        puesto: puestoActual,
+        nombre_candidato: nombre,
+        fecha_entrevista: new Date().toISOString(),
+        transcripcion: '',
+        informe: notas || 'Candidato agregado manualmente.',
+        competencias_evaluadas: '[]',
+        porcentaje_afinidad: 0,
+        recomendacion: 'Preseleccion',
+        justificacion: 'Ingresado manualmente por el reclutador.'
+      })
+    });
+
+    okEl.textContent = nombre + ' fue agregado correctamente.';
+    okEl.style.display = 'block';
+
+    setTimeout(function() {
+      cerrarAgregarCandidato();
+      verDetalle(puestoActual, '');
+    }, 1500);
+
+  } catch(e) {
+    errEl.textContent = 'Error al guardar: ' + e.message;
+    errEl.style.display = 'block';
+  }
+
+  btn.disabled = false; btn.textContent = 'Agregar';
+}
 
 // CALENDARIO
 async function cargarCalendario() {
