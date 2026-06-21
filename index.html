@@ -499,16 +499,12 @@ textarea{min-height:80px;}
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script>
-var N8N = 'https://candisia-proxy.pingetfranc.workers.dev/webhook';
-var USUARIOS = {
-  'franco': { password: 'Candis2026!', nombre: 'Franco Pinget' },
-  'reclutador1': { password: 'Candis2026!', nombre: 'Reclutador 1' },
-  'reclutador2': { password: 'Candis2026!', nombre: 'Reclutador 2' },
-};
+var API = 'https://candisia-backend-production.up.railway.app/api';
 var ESTADOS = ['Preseleccion','Primer contacto','Entrevista','Presentado','Avanzado','Cerrado'];
 var MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 var DIAS = ['Dom','Lun','Mar','Mie','Jue','Vie','Sab'];
 var usuarioActual = null;
+var tokenActual = null;
 var chartA = null, chartR = null;
 var todasLasBusquedas = [];
 var eventosCalendar = [];
@@ -516,16 +512,43 @@ var calFecha = new Date();
 var calVista = 'lista';
 var datoVacante = {};
 
+function headersAuth() {
+  return { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + tokenActual };
+}
+
 // LOGIN
-function hacerLogin() {
+async function hacerLogin() {
   var user = document.getElementById('login-user').value.trim().toLowerCase();
   var pass = document.getElementById('login-pass').value;
-  document.getElementById('login-error').style.display = 'none';
-  if (USUARIOS[user] && USUARIOS[user].password === pass) {
-    usuarioActual = { username: user, nombre: USUARIOS[user].nombre };
-    window.location.hash = 'u=' + user;
-    mostrarApp();
-  } else { document.getElementById('login-error').style.display = 'block'; }
+  var errEl = document.getElementById('login-error');
+  errEl.style.display = 'none';
+  var btn = document.querySelector('.login-btn');
+  var btnTextoOriginal = btn.textContent;
+  btn.textContent = 'Ingresando...';
+  btn.disabled = true;
+  try {
+    var res = await fetch(API + '/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: user, password: pass })
+    });
+    var data = await res.json();
+    if (!res.ok) {
+      errEl.textContent = data.error || 'Usuario o contraseña incorrectos';
+      errEl.style.display = 'block';
+    } else {
+      tokenActual = data.token;
+      usuarioActual = { username: data.username, nombre: data.nombre };
+      sessionStorage.setItem('candis_token', tokenActual);
+      sessionStorage.setItem('candis_user', JSON.stringify(usuarioActual));
+      mostrarApp();
+    }
+  } catch (e) {
+    errEl.textContent = 'No se pudo conectar con el servidor.';
+    errEl.style.display = 'block';
+  }
+  btn.textContent = btnTextoOriginal;
+  btn.disabled = false;
 }
 function mostrarApp() {
   document.getElementById('login-overlay').classList.add('hidden');
@@ -536,7 +559,9 @@ function mostrarApp() {
 }
 function cerrarSesion() {
   usuarioActual = null;
-  window.location.hash = '';
+  tokenActual = null;
+  sessionStorage.removeItem('candis_token');
+  sessionStorage.removeItem('candis_user');
   document.getElementById('login-overlay').classList.remove('hidden');
   document.getElementById('nav').style.display = 'none';
   document.querySelectorAll('.vista').forEach(function(v){ v.classList.remove('activa'); });
@@ -544,10 +569,11 @@ function cerrarSesion() {
   document.getElementById('login-pass').value = '';
 }
 (function() {
-  var hash = window.location.hash;
-  var match = hash.match(/u=([a-z0-9]+)/);
-  if (match && USUARIOS[match[1]]) {
-    usuarioActual = { username: match[1], nombre: USUARIOS[match[1]].nombre };
+  var savedToken = sessionStorage.getItem('candis_token');
+  var savedUser = sessionStorage.getItem('candis_user');
+  if (savedToken && savedUser) {
+    tokenActual = savedToken;
+    usuarioActual = JSON.parse(savedUser);
     mostrarApp();
   } else {
     document.getElementById('login-overlay').classList.remove('hidden');
@@ -564,27 +590,15 @@ function irA(vista) {
   if (vista === 'calendario') cargarCalendario();
 }
 
-function parseData(text) {
-  var limpio = text.replace(/^=+/, '').trim();
-  if (!limpio) throw new Error('Respuesta vacia');
-  return JSON.parse(limpio);
-}
-function obtenerObjeto(data){ return Array.isArray(data) ? data[0]||{} : data; }
-function obtenerArray(data){ return Array.isArray(data) ? data : [data]; }
-
 // BUSQUEDAS
 async function cargarBusquedas() {
   var grid = document.getElementById('busquedas-grid');
   grid.innerHTML = '<div class="empty-state"><div class="empty-icon">&#8987;</div><h3>Cargando...</h3></div>';
   try {
-    var res = await fetch(N8N + '/listar-vacantes');
-    var data = parseData(await res.text());
-    var vacantes = obtenerArray(data).filter(function(v){ return v && v.puesto && v.puesto.trim(); });
-    var canceladas = getVacantesCanceladas();
-    vacantes = vacantes.filter(function(v){ return !canceladas.includes(v.puesto.trim()); });
-    var unicos = {};
-    vacantes.forEach(function(v){ var p = v.puesto.trim(); if(!unicos[p]) unicos[p] = v; });
-    todasLasBusquedas = Object.values(unicos);
+    var res = await fetch(API + '/vacantes', { headers: headersAuth() });
+    if (res.status === 401) { cerrarSesion(); return; }
+    var data = await res.json();
+    todasLasBusquedas = data;
     renderBusquedas(todasLasBusquedas);
   } catch(e) {
     grid.innerHTML = '<div class="empty-state"><div class="empty-icon">&#9888;</div><h3>Error al cargar</h3><p>' + e.message + '</p></div>';
@@ -602,38 +616,29 @@ function renderBusquedas(lista) {
   if (!lista.length) { grid.innerHTML = '<div class="empty-state"><div class="empty-icon">&#128196;</div><h3>No hay busquedas activas</h3><p>Crea tu primera busqueda.</p></div>'; return; }
   var iconos = ['&#128188;','&#127919;','&#11088;','&#128640;','&#128161;','&#127775;','&#127970;','&#127882;'];
   grid.innerHTML = lista.map(function(v,i){
-    var f = v.fecha ? new Date(v.fecha.trim()).toLocaleDateString('es-AR') : '';
-    var p = v.puesto.trim();
+    var f = v.fecha ? new Date(v.fecha).toLocaleDateString('es-AR') : '';
+    var p = (v.puesto||'').trim();
     var ubicacion = [v.ciudad,v.provincia,v.pais].filter(Boolean).map(function(x){ return x.trim(); }).join(', ');
-    return '<div class="busqueda-card" onclick="verDetalle(\'' + p.replace(/'/g,"\\'") + '\',\'' + (v.fecha||'').trim() + '\')">' +
+    return '<div class="busqueda-card" onclick="verDetalle(' + v.id + ')">' +
       '<div class="busqueda-icon">' + iconos[i%iconos.length] + '</div>' +
       '<div class="busqueda-puesto">' + p + '</div>' +
       '<div class="busqueda-fecha">' + f + '</div>' +
       (ubicacion ? '<div class="busqueda-ubicacion">' + ubicacion + '</div>' : '') +
-      '<button class="busqueda-del-btn" onclick="event.stopPropagation();confirmarBorrarVacante(\'' + p.replace(/'/g,"\\'") + '\')">Cancelar busqueda</button>' +
+      '<button class="busqueda-del-btn" onclick="event.stopPropagation();confirmarBorrarVacante(' + v.id + ',\'' + p.replace(/'/g,"\\'") + '\')">Cancelar busqueda</button>' +
       '</div>';
   }).join('');
 }
 
-function getVacantesCanceladas() {
-  try { return JSON.parse(localStorage.getItem('candis_canceladas') || '[]'); } catch(e){ return []; }
-}
-function guardarVacanteCancelada(puesto) {
-  try {
-    var canceladas = getVacantesCanceladas();
-    if (!canceladas.includes(puesto)) canceladas.push(puesto);
-    localStorage.setItem('candis_canceladas', JSON.stringify(canceladas));
-  } catch(e){}
-}
-
-function confirmarBorrarVacante(puesto) {
+function confirmarBorrarVacante(id, puesto) {
   document.getElementById('confirm-title').textContent = 'Cancelar busqueda';
   document.getElementById('confirm-sub').textContent = 'Queres cancelar la busqueda "' + puesto + '"? No volvera a aparecer en tu lista.';
   document.getElementById('confirm-overlay').classList.add('visible');
-  document.getElementById('confirm-btn').onclick = function(){
-    guardarVacanteCancelada(puesto);
-    todasLasBusquedas = todasLasBusquedas.filter(function(v){ return v.puesto.trim() !== puesto; });
-    renderBusquedas(todasLasBusquedas);
+  document.getElementById('confirm-btn').onclick = async function(){
+    try {
+      await fetch(API + '/vacantes/' + id, { method: 'DELETE', headers: headersAuth() });
+      todasLasBusquedas = todasLasBusquedas.filter(function(v){ return v.id !== id; });
+      renderBusquedas(todasLasBusquedas);
+    } catch(e) { alert('Error al cancelar: ' + e.message); }
     cerrarConfirm();
   };
 }
@@ -658,10 +663,11 @@ async function generarVacante() {
   btn.disabled = true;
   btn.innerHTML = '<div class="spinner"></div><span>Generando...</span>';
   try {
-    var body = {puesto,descripcion,requisitos,perfil_ideal,experiencia,autor:usuarioActual.username,pais,provincia,ciudad,modalidad,jornada};
-    var res = await fetch(N8N + '/nueva-vacante', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-    var datos = obtenerObjeto(parseData(await res.text()));
-    datoVacante = {puesto,ciudad,provincia,pais,modalidad,jornada,experiencia,competencias_generales:datos.competencias_generales||''};
+    var body = {puesto,descripcion,requisitos,perfil_ideal,experiencia,pais,provincia,ciudad,modalidad,jornada};
+    var res = await fetch(API + '/vacantes', {method:'POST', headers: headersAuth(), body:JSON.stringify(body)});
+    var datos = await res.json();
+    if (!res.ok) throw new Error(datos.error || 'Error al generar la vacante');
+    datoVacante = {id: datos.id, puesto,ciudad,provincia,pais,modalidad,jornada,experiencia,competencias_generales:datos.competencias_generales||''};
     mostrarResultados(datos);
     okEl.textContent = 'Busqueda "' + puesto + '" guardada correctamente.';
     okEl.style.display = 'block';
@@ -684,9 +690,9 @@ function mostrarResultados(d) {
 }
 
 // DETALLE
-async function verDetalle(puesto, fecha) {
-  document.getElementById('det-titulo').textContent = puesto;
-  document.getElementById('det-sub').textContent = fecha ? 'Creada: ' + new Date(fecha.trim()).toLocaleDateString('es-AR') : '';
+async function verDetalle(id) {
+  document.getElementById('det-titulo').textContent = 'Cargando...';
+  document.getElementById('det-sub').textContent = '';
   document.getElementById('det-aviso').textContent = 'Cargando...';
   document.getElementById('candidatos-lista').innerHTML = '<div class="empty-state"><div class="empty-icon">&#8987;</div><h3>Cargando...</h3></div>';
   document.getElementById('charts-section').style.display = 'none';
@@ -696,8 +702,11 @@ async function verDetalle(puesto, fecha) {
   document.getElementById('det-vacante').classList.add('active');
   irA('detalle');
   try {
-    var res = await fetch(N8N + '/detalle-vacante?puesto=' + encodeURIComponent(puesto));
-    var d = obtenerObjeto(parseData(await res.text()));
+    var res = await fetch(API + '/vacantes/' + id, { headers: headersAuth() });
+    var d = await res.json();
+    if (!res.ok) throw new Error(d.error || 'No se pudo cargar la vacante');
+    document.getElementById('det-titulo').textContent = d.puesto;
+    document.getElementById('det-sub').textContent = 'Creada: ' + new Date(d.created_at).toLocaleDateString('es-AR');
     document.getElementById('det-aviso').textContent = d.aviso_linkedin || '';
     var cg = (d.competencias_generales||'').split(', ').filter(Boolean);
     var ce = (d.competencias_especificas||'').split(', ').filter(Boolean);
@@ -706,66 +715,66 @@ async function verDetalle(puesto, fecha) {
     renderPreg('det-tab-ab', (d.preguntas_abiertas||'').split(' | ').filter(Boolean));
     renderPreg('det-tab-se', (d.preguntas_semiestructuradas||'').split(' | ').filter(Boolean));
     renderPreg('det-tab-es', (d.preguntas_estructuradas||'').split(' | ').filter(Boolean));
-    // Generar placa automáticamente
-    var datosPlaca = {
-      puesto: puesto,
-      ciudad: d.ciudad || '',
-      provincia: d.provincia || '',
-      pais: d.pais || '',
-      modalidad: d.modalidad || '',
-      jornada: d.jornada || '',
-      experiencia: d.experiencia || '',
+    datoVacante = {
+      id: d.id, puesto: d.puesto, ciudad: d.ciudad || '', provincia: d.provincia || '', pais: d.pais || '',
+      modalidad: d.modalidad || '', jornada: d.jornada || '', experiencia: d.experiencia || '',
       competencias_generales: d.competencias_generales || ''
     };
     document.getElementById('det-placa-section').style.display = 'block';
     document.getElementById('det-placa-preview').innerHTML = '<div style="padding:16px;color:var(--text2);font-size:13px;font-weight:600">Generando placa con IA...</div>';
-    generarPlacaDetalle(datosPlaca);
-  } catch(e) { document.getElementById('det-aviso').textContent = 'Error al cargar.'; }
-  try {
-    var res2 = await fetch(N8N + '/listar-candidatos?puesto=' + encodeURIComponent(puesto));
-    var data2 = obtenerArray(parseData(await res2.text())).filter(function(c){ return c && c.nombre_candidato; });
-    renderCandidatos(data2);
-  } catch(e) { document.getElementById('candidatos-lista').innerHTML = '<div class="empty-state"><div class="empty-icon">&#128100;</div><h3>Sin candidatos aun</h3></div>'; }
+    generarPlacaDetalle(datoVacante);
+
+    var res2 = await fetch(API + '/candidatos?puesto=' + encodeURIComponent(d.puesto), { headers: headersAuth() });
+    var candidatos = await res2.json();
+    renderCandidatos(candidatos);
+  } catch(e) {
+    document.getElementById('det-aviso').textContent = 'Error al cargar.';
+    document.getElementById('candidatos-lista').innerHTML = '<div class="empty-state"><div class="empty-icon">&#128100;</div><h3>Sin candidatos aun</h3></div>';
+  }
 }
 
 // CANDIDATOS
 function renderCandidatos(candidatos) {
   var el = document.getElementById('candidatos-lista');
   if (!candidatos.length) { el.innerHTML = '<div class="empty-state"><div class="empty-icon">&#128100;</div><h3>Sin candidatos aun</h3><p>Las entrevistas de Meet apareceran aqui automaticamente.</p></div>'; document.getElementById('charts-section').style.display = 'none'; return; }
-  var estados = {};
-  try { estados = JSON.parse(localStorage.getItem('estados_candidatos')||'{}'); } catch(e){}
-  el.innerHTML = candidatos.map(function(c,idx){
+  el.innerHTML = candidatos.map(function(c){
     var bc = c.recomendacion==='Avanzar'?'badge-ok':(c.recomendacion==='No avanzar'?'badge-no':'badge-pend');
-    var estadoActual = estados[c.id_candidato]||'Primer contacto';
-    var estadoOpts = ESTADOS.map(function(e){ return '<option value="'+e+'"'+(e===estadoActual?' selected':'')+'>'+e+'</option>'; }).join('');
     var cd = encodeURIComponent(JSON.stringify(c));
     var nombre = (c.nombre_candidato||'').replace(/'/g,"\\'");
     var puesto = (c.puesto||'').replace(/'/g,"\\'");
-    return '<div class="candidato-card" id="card-'+(c.id_candidato||idx)+'">' +
+    var estadoOpts = ESTADOS.map(function(e){ return '<option value="'+e+'"'+(e===c.estado_proceso?' selected':'')+'>'+e+'</option>'; }).join('');
+    return '<div class="candidato-card" id="card-'+c.id+'">' +
       '<div class="candidato-header" onclick="verCandidato(decodeURIComponent(\''+cd+'\'))">' +
         '<div><div class="candidato-nombre">'+(c.nombre_candidato||'')+'</div>' +
-        '<div class="candidato-meta">'+(c.fecha_entrevista?new Date(c.fecha_entrevista.trim()).toLocaleDateString('es-AR'):'')+'</div>' +
+        '<div class="candidato-meta">'+(c.fecha_entrevista?new Date(c.fecha_entrevista).toLocaleDateString('es-AR'):'')+'</div>' +
         '<span class="badge '+bc+'">'+(c.recomendacion||'Pendiente')+'</span></div>' +
         '<div class="afinidad-badge"><div class="afinidad-num">'+(c.porcentaje_afinidad||0)+'%</div><div class="afinidad-label">Afinidad</div></div>' +
       '</div>' +
       '<div class="candidato-actions">' +
         '<button class="btn-accion" onclick="verCandidato(decodeURIComponent(\''+cd+'\'))">Ver informe</button>' +
         '<button class="btn-accion btn-accion-green" onclick="abrirNuevoEvento(\''+nombre+'\',\''+puesto+'\')">Agendar</button>' +
-        '<select class="estado-select" onchange="cambiarEstado(\''+(c.id_candidato||idx)+'\',this.value)" onclick="event.stopPropagation()">'+estadoOpts+'</select>' +
-        '<button class="btn-accion btn-accion-danger" onclick="confirmarEliminar(\''+(c.id_candidato||idx)+'\',\''+nombre+'\')">Eliminar</button>' +
+        '<select class="estado-select" onchange="cambiarEstado('+c.id+',this.value)" onclick="event.stopPropagation()">'+estadoOpts+'</select>' +
+        '<button class="btn-accion btn-accion-danger" onclick="confirmarEliminar('+c.id+',\''+nombre+'\')">Eliminar</button>' +
       '</div></div>';
   }).join('');
   document.getElementById('charts-section').style.display = 'block';
   renderCharts(candidatos);
 }
-function cambiarEstado(id,estado) { try { var e=JSON.parse(localStorage.getItem('estados_candidatos')||'{}'); e[id]=estado; localStorage.setItem('estados_candidatos',JSON.stringify(e)); } catch(e){} }
+async function cambiarEstado(id,estado) {
+  try {
+    await fetch(API + '/candidatos/' + id + '/estado', { method: 'PATCH', headers: headersAuth(), body: JSON.stringify({ estado_proceso: estado }) });
+  } catch(e) { alert('Error al cambiar el estado: ' + e.message); }
+}
 function confirmarEliminar(id,nombre) {
   document.getElementById('confirm-title').textContent = 'Eliminar candidato';
   document.getElementById('confirm-sub').textContent = 'Queres eliminar a ' + nombre + '? Esta accion no se puede deshacer.';
   document.getElementById('confirm-overlay').classList.add('visible');
-  document.getElementById('confirm-btn').onclick = function(){
-    var card = document.getElementById('card-'+id);
-    if(card){ card.style.opacity='0'; card.style.transition='opacity 0.3s'; setTimeout(function(){ card.remove(); },300); }
+  document.getElementById('confirm-btn').onclick = async function(){
+    try {
+      await fetch(API + '/candidatos/' + id, { method: 'DELETE', headers: headersAuth() });
+      var card = document.getElementById('card-'+id);
+      if(card){ card.style.opacity='0'; card.style.transition='opacity 0.3s'; setTimeout(function(){ card.remove(); },300); }
+    } catch(e) { alert('Error al eliminar: ' + e.message); }
     cerrarConfirm();
   };
 }
@@ -800,9 +809,11 @@ function cerrarModal(e){ if(!e||e.target===document.getElementById('modal')) doc
 
 // CANDIDATO MANUAL
 var puestoActual = '';
+var vacanteActualId = null;
 
 function abrirAgregarCandidato() {
   puestoActual = document.getElementById('det-titulo').textContent;
+  vacanteActualId = datoVacante.id;
   document.getElementById('candidato-vacante-sub').textContent = 'Vacante: ' + puestoActual;
   document.getElementById('cand-nombre').value = '';
   document.getElementById('cand-email').value = '';
@@ -819,8 +830,6 @@ function cerrarAgregarCandidato() {
 
 async function guardarCandidatoManual() {
   var nombre = document.getElementById('cand-nombre').value.trim();
-  var email = document.getElementById('cand-email').value.trim();
-  var tel = document.getElementById('cand-tel').value.trim();
   var notas = document.getElementById('cand-notas').value.trim();
   var errEl = document.getElementById('cand-error');
   var okEl = document.getElementById('cand-ok');
@@ -832,30 +841,26 @@ async function guardarCandidatoManual() {
   btn.disabled = true; btn.textContent = 'Guardando...';
 
   try {
-    var res = await fetch(N8N + '/agregar-candidato', {
+    var res = await fetch(API + '/candidatos', {
       method: 'POST',
-      headers: {'Content-Type': 'application/json'},
+      headers: headersAuth(),
       body: JSON.stringify({
-        id_candidato: String(Date.now()),
+        vacante_id: vacanteActualId,
         puesto: puestoActual,
         nombre_candidato: nombre,
-        fecha_entrevista: new Date().toISOString(),
-        transcripcion: '',
-        informe: notas || 'Candidato agregado manualmente.',
-        competencias_evaluadas: '[]',
-        porcentaje_afinidad: 0,
-        recomendacion: 'Preseleccion',
-        justificacion: 'Ingresado manualmente por el reclutador.'
+        informe: notas || undefined
       })
     });
+    var data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Error al guardar');
 
     okEl.textContent = nombre + ' fue agregado correctamente.';
     okEl.style.display = 'block';
 
     setTimeout(function() {
       cerrarAgregarCandidato();
-      verDetalle(puestoActual, '');
-    }, 1500);
+      verDetalle(vacanteActualId);
+    }, 1200);
 
   } catch(e) {
     errEl.textContent = 'Error al guardar: ' + e.message;
@@ -869,9 +874,10 @@ async function guardarCandidatoManual() {
 async function cargarCalendario() {
   document.getElementById('cal-lista').innerHTML = '<div class="empty-state"><div class="empty-icon">&#8987;</div><h3>Cargando...</h3></div>';
   try {
-    var res = await fetch(N8N + '/listar-eventos');
-    var data = parseData(await res.text());
-    eventosCalendar = obtenerArray(data).filter(function(e){ return e && (e.summary||e.id); });
+    var res = await fetch(API + '/eventos', { headers: headersAuth() });
+    var data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Error al cargar eventos');
+    eventosCalendar = data.filter(function(e){ return e && (e.summary||e.id); });
     if(calVista==='lista') renderCalendarioLista(); else renderCalendarioGrilla();
   } catch(e) { document.getElementById('cal-lista').innerHTML = '<div class="empty-state"><div class="empty-icon">&#9888;</div><h3>Error al cargar</h3></div>'; }
 }
@@ -939,9 +945,14 @@ async function crearEvento() {
   if(!titulo||!inicio||!fin){ alert('Completa titulo, inicio y fin.'); return; }
   btn.disabled=true; btn.textContent='Creando...';
   try {
-    var res=await fetch(N8N+'/crear-evento',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({titulo,inicio:new Date(inicio).toISOString(),fin:new Date(fin).toISOString(),descripcion:desc})});
-    var data=parseData(await res.text());
-    var meetLink=data.hangoutLink||(data.conferenceData&&data.conferenceData.entryPoints&&data.conferenceData.entryPoints[0]&&data.conferenceData.entryPoints[0].uri);
+    var res = await fetch(API + '/eventos', {
+      method: 'POST',
+      headers: headersAuth(),
+      body: JSON.stringify({ titulo: titulo, inicio: new Date(inicio).toISOString(), fin: new Date(fin).toISOString(), descripcion: desc })
+    });
+    var data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'No se pudo crear el evento');
+    var meetLink = data.hangoutLink || '';
     var linkEl=document.getElementById('ev-meet-link');
     if(meetLink){ linkEl.href=meetLink; linkEl.textContent='Abrir Google Meet'; } else { linkEl.href='https://calendar.google.com'; linkEl.textContent='Ver en Google Calendar'; }
     document.getElementById('ev-result').style.display='block';
@@ -954,22 +965,25 @@ async function crearEvento() {
 async function generarPlacasPreview() {
   var preview = document.getElementById('placa-preview');
   preview.innerHTML = '<div style="padding:20px;color:var(--text2);font-size:13px;font-weight:600">Generando imagen con IA... puede tardar unos segundos.</div>';
+  await esperarYMostrarPlaca(datoVacante.id, 'placa-preview', datoVacante);
+}
+
+async function esperarYMostrarPlaca(vacanteId, containerId, datos, intento) {
+  intento = intento || 0;
+  if (intento >= 12) {
+    document.getElementById(containerId).innerHTML = '<div style="color:var(--text2);font-size:13px;font-weight:600">La placa está tardando más de lo esperado. Volvé a entrar a la vacante en unos minutos.</div>';
+    return;
+  }
   try {
-    var res = await fetch(N8N + '/generar-placa', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({puesto: datoVacante.puesto, ciudad: datoVacante.ciudad || 'Argentina'})
-    });
-    var text = await res.text();
-    var data = JSON.parse(text.replace(/^=+/, ''));
-    if (data.image_base64) {
-      window._placaImageBase64 = data.image_base64;
-      mostrarPlacaHTML('placa-preview', data.image_base64, datoVacante);
+    var res = await fetch(API + '/vacantes/' + vacanteId, { headers: headersAuth() });
+    var d = await res.json();
+    if (d.imagen_placa) {
+      mostrarPlacaHTMLconURL(containerId, API.replace('/api','') + d.imagen_placa, datos);
     } else {
-      preview.innerHTML = '<div style="color:var(--danger);font-size:13px;font-weight:600">No se pudo generar la imagen.</div>';
+      setTimeout(function() { esperarYMostrarPlaca(vacanteId, containerId, datos, intento + 1); }, 2500);
     }
   } catch(e) {
-    preview.innerHTML = '<div style="color:var(--danger);font-size:13px;font-weight:600">Error: ' + e.message + '</div>';
+    document.getElementById(containerId).innerHTML = '<div style="color:var(--danger);font-size:13px;font-weight:600">Error al cargar la placa.</div>';
   }
 }
 
@@ -1041,34 +1055,8 @@ async function descargarPlaca() {
   await descargarElemento(placaEl, datoVacante.puesto);
 }
 
-var placaCache = {};
-
 async function generarPlacaDetalle(datos) {
-  var puesto = datos.puesto || '';
-  
-  // Si ya está en caché, mostrar sin generar nueva
-  if (placaCache[puesto]) {
-    mostrarPlacaHTML('det-placa-preview', placaCache[puesto], datos);
-    return;
-  }
-
-  try {
-    var res = await fetch(N8N + '/generar-placa', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({puesto: puesto, ciudad: datos.ciudad || 'Argentina'})
-    });
-    var text = await res.text();
-    var data = JSON.parse(text.replace(/^=+/, ''));
-    if (data.image_base64) {
-      placaCache[puesto] = data.image_base64;
-      mostrarPlacaHTML('det-placa-preview', data.image_base64, datos);
-    } else {
-      document.getElementById('det-placa-preview').innerHTML = '<div style="color:var(--danger);font-size:13px;font-weight:600">No se pudo generar la placa.</div>';
-    }
-  } catch(e) {
-    document.getElementById('det-placa-preview').innerHTML = '<div style="color:var(--danger);font-size:13px;font-weight:600">Error al generar la placa.</div>';
-  }
+  await esperarYMostrarPlaca(datos.id, 'det-placa-preview', datos);
 }
 
 async function descargarPlacaDetalle() {
