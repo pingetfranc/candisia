@@ -893,7 +893,14 @@ function renderCalendarioLista() {
     var hora = fecha&&ev.start.dateTime?fecha.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'}):'Todo el dia';
     var hasMeet = ev.hangoutLink||(ev.conferenceData&&ev.conferenceData.entryPoints&&ev.conferenceData.entryPoints.length);
     var meetUrl = ev.hangoutLink||(hasMeet&&ev.conferenceData.entryPoints[0].uri)||'#';
-    return '<div class="evento-row"><div class="evento-fecha-badge"><div class="evento-dia">'+dia+'</div><div class="evento-mes-badge">'+mes+'</div></div><div class="evento-info"><div class="evento-titulo">'+(ev.summary||'Sin titulo')+'</div><div class="evento-hora">'+hora+'</div></div>'+(hasMeet?'<a class="evento-meet-btn" href="'+meetUrl+'" target="_blank">Abrir Meet</a>':'')+'</div>';
+    var meetUrlConDatos = meetUrl;
+    if (hasMeet && ev.summary) {
+      var partes = ev.summary.split(/\s*[-]+\s*/);
+      if (partes.length >= 2) {
+        meetUrlConDatos = meetUrl + '#candisia_candidato=' + encodeURIComponent(partes[0].trim()) + '&candisia_puesto=' + encodeURIComponent(partes.slice(1).join(' - ').trim());
+      }
+    }
+    return '<div class="evento-row"><div class="evento-fecha-badge"><div class="evento-dia">'+dia+'</div><div class="evento-mes-badge">'+mes+'</div></div><div class="evento-info"><div class="evento-titulo">'+(ev.summary||'Sin titulo')+'</div><div class="evento-hora">'+hora+'</div></div>'+(hasMeet?'<a class="evento-meet-btn" href="'+meetUrlConDatos+'" target="_blank">Abrir Meet</a>':'')+'</div>';
   }).join('');
 }
 function renderCalendarioGrilla() {
@@ -954,7 +961,14 @@ async function crearEvento() {
     if (!res.ok) throw new Error(data.error || 'No se pudo crear el evento');
     var meetLink = data.hangoutLink || '';
     var linkEl=document.getElementById('ev-meet-link');
-    if(meetLink){ linkEl.href=meetLink; linkEl.textContent='Abrir Google Meet'; } else { linkEl.href='https://calendar.google.com'; linkEl.textContent='Ver en Google Calendar'; }
+    if(meetLink){
+      var partesTitulo = titulo.split(/\s*[-]+\s*/);
+      var meetLinkConDatos = meetLink;
+      if (partesTitulo.length >= 2) {
+        meetLinkConDatos = meetLink + '#candisia_candidato=' + encodeURIComponent(partesTitulo[0].trim()) + '&candisia_puesto=' + encodeURIComponent(partesTitulo.slice(1).join(' - ').trim());
+      }
+      linkEl.href=meetLinkConDatos; linkEl.textContent='Abrir Google Meet';
+    } else { linkEl.href='https://calendar.google.com'; linkEl.textContent='Ver en Google Calendar'; }
     document.getElementById('ev-result').style.display='block';
     eventosCalendar.push(data);
   } catch(e){ alert('Error: '+e.message); }
