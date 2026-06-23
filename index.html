@@ -992,7 +992,7 @@ async function esperarYMostrarPlaca(vacanteId, containerId, datos, intento) {
     var res = await fetch(API + '/vacantes/' + vacanteId, { headers: headersAuth() });
     var d = await res.json();
     if (d.imagen_placa) {
-      mostrarPlacaHTMLconURL(containerId, API.replace('/api','') + d.imagen_placa, datos);
+      mostrarPlacaHTMLconURL(containerId, API + '/vacantes/' + vacanteId + '/imagen', datos);
     } else {
       setTimeout(function() { esperarYMostrarPlaca(vacanteId, containerId, datos, intento + 1); }, 2500);
     }
