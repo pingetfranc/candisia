@@ -150,13 +150,19 @@ textarea{min-height:80px;}
 .det-content.active{display:block;}
 
 /* CANDIDATOS */
-.candidato-card{background:var(--surface);border:1.5px solid var(--border);border-radius:14px;padding:20px;margin-bottom:12px;box-shadow:var(--shadow);transition:box-shadow 0.2s;}
+.candidato-card{background:var(--surface);border:1.5px solid var(--border);border-radius:14px;padding:18px 20px;margin-bottom:12px;box-shadow:var(--shadow);transition:box-shadow 0.2s;}
 .candidato-card:hover{box-shadow:var(--shadow-hover);}
-.candidato-header{display:grid;grid-template-columns:1fr auto;gap:16px;align-items:start;cursor:pointer;}
-.candidato-nombre{font-size:16px;font-weight:700;margin-bottom:4px;color:var(--text);}
-.candidato-meta{font-size:12px;color:var(--text2);margin-bottom:10px;font-weight:500;}
-.candidato-actions{display:flex;gap:8px;margin-top:14px;align-items:center;flex-wrap:wrap;}
-.afinidad-badge{background:var(--accent);border-radius:10px;padding:10px 14px;text-align:center;min-width:70px;}
+.candidato-header{display:grid;grid-template-columns:1fr auto;gap:16px;align-items:start;}
+.candidato-nombre-row{display:flex;align-items:center;gap:8px;margin-bottom:3px;flex-wrap:wrap;}
+.candidato-nombre{font-size:16px;font-weight:700;color:var(--text);}
+.candidato-meta{font-size:12px;color:var(--text2);margin-bottom:8px;font-weight:500;}
+.candidato-actions{display:flex;gap:8px;margin-top:12px;align-items:center;flex-wrap:wrap;border-top:1px solid var(--border);padding-top:12px;}
+.afinidad-badge{background:var(--accent);border-radius:10px;padding:10px 14px;text-align:center;min-width:70px;cursor:pointer;}
+.btn-icon{background:none;border:1.5px solid var(--border);border-radius:8px;padding:4px 9px;cursor:pointer;font-size:14px;transition:all 0.2s;color:var(--text2);line-height:1;}
+.btn-icon:hover{border-color:var(--accent);color:var(--accent);}
+.btn-icon-whatsapp{border-color:#25D366;color:#25D366;}
+.btn-icon-whatsapp:hover{background:#25D366;color:#fff;}
+.btn-icon-cv{border-color:var(--border);color:var(--text2);}
 .afinidad-num{font-size:22px;font-weight:800;color:white;line-height:1;}
 .afinidad-label{font-size:10px;color:rgba(255,255,255,0.8);font-weight:600;margin-top:2px;}
 .badge{display:inline-block;padding:4px 12px;border-radius:6px;font-size:11px;font-weight:700;}
@@ -745,19 +751,23 @@ function renderCandidatos(candidatos) {
     var puesto = (c.puesto||'').replace(/'/g,"\\'");
     var estadoOpts = ESTADOS.map(function(e){ return '<option value="'+e+'"'+(e===c.estado_proceso?' selected':'')+'>'+e+'</option>'; }).join('');
     return '<div class="candidato-card" id="card-'+c.id+'">' +
-      '<div class="candidato-header" onclick="verCandidato(decodeURIComponent(\''+cd+'\'))">' +
-        '<div><div class="candidato-nombre">'+(c.nombre_candidato||'')+'</div>' +
-        '<div class="candidato-meta">'+(c.fecha_entrevista?new Date(c.fecha_entrevista).toLocaleDateString('es-AR'):'')+'</div>' +
-        '<span class="badge '+bc+'">'+(c.recomendacion||'Pendiente')+'</span></div>' +
-        '<div class="afinidad-badge"><div class="afinidad-num">'+(c.porcentaje_afinidad||0)+'%</div><div class="afinidad-label">Afinidad</div></div>' +
+      '<div class="candidato-header">' +
+        '<div>' +
+          '<div class="candidato-nombre-row">' +
+            '<span class="candidato-nombre" style="cursor:pointer" onclick="verCandidato(decodeURIComponent(\''+cd+'\'))">'+(c.nombre_candidato||'')+'</span>' +
+            (c.telefono ? '<button class="btn-icon btn-icon-whatsapp" onclick="abrirWhatsApp(\''+c.telefono+'\')" title="Abrir WhatsApp">💬</button>' : '') +
+            '<button class="btn-icon btn-icon-cv" onclick="subirCVCandidato('+c.id+',\''+nombre+'\')" title="'+(c.cv_nombre?'Reemplazar CV':'Subir CV')+'">📄</button>' +
+            (c.cv_nombre ? '<button class="btn-icon" onclick="descargarCV('+c.id+')" title="Descargar CV: '+c.cv_nombre+'">⬇</button>' : '') +
+          '</div>' +
+          '<div class="candidato-meta">'+(c.fecha_entrevista?new Date(c.fecha_entrevista).toLocaleDateString('es-AR'):'Sin entrevista')+'</div>' +
+          '<span class="badge '+bc+'">'+(c.recomendacion||'Pendiente')+'</span>' +
+        '</div>' +
+        '<div class="afinidad-badge" onclick="verCandidato(decodeURIComponent(\''+cd+'\'))"><div class="afinidad-num">'+(c.porcentaje_afinidad||0)+'%</div><div class="afinidad-label">Afinidad</div></div>' +
       '</div>' +
       '<div class="candidato-actions">' +
         '<button class="btn-accion" onclick="verCandidato(decodeURIComponent(\''+cd+'\'))">Ver informe</button>' +
-        '<button class="btn-accion btn-accion-green" onclick="abrirNuevoEvento(\''+nombre+'\',\''+puesto+'\')">Agendar</button>' +
-        (c.telefono ? '<button class="btn-accion" style="background:#25D366;color:#fff" onclick="abrirWhatsApp(\''+c.telefono+'\')">💬 WhatsApp</button>' : '') +
-        '<button class="btn-accion" onclick="subirCVCandidato('+c.id+',\''+nombre+'\')" title="Subir CV">📄 CV</button>' +
-        (c.cv_nombre ? '<button class="btn-accion" onclick="descargarCV('+c.id+')">⬇ Descargar CV</button>' : '') +
-        '<button class="btn-accion" style="background:var(--primary);color:#fff" onclick="generarInformeWord('+c.id+',\''+nombre+'\',decodeURIComponent(\''+cd+'\'  ))">📝 Informe Word</button>' +
+        '<button class="btn-accion btn-accion-green" onclick="abrirNuevoEvento(\''+nombre+'\',\''+puesto+'\')" >Agendar Meet</button>' +
+        '<button class="btn-accion" onclick="generarInformeWord('+c.id+',\''+nombre+'\',decodeURIComponent(\''+cd+'\'))">Informe Word</button>' +
         '<select class="estado-select" onchange="cambiarEstado('+c.id+',this.value)" onclick="event.stopPropagation()">'+estadoOpts+'</select>' +
         '<button class="btn-accion btn-accion-danger" onclick="confirmarEliminar('+c.id+',\''+nombre+'\')">Eliminar</button>' +
       '</div></div>';
