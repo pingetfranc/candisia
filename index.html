@@ -474,7 +474,8 @@ textarea{min-height:80px;}
     <div class="evento-modal-sub" id="candidato-vacante-sub"></div>
     <div class="ev-field"><label>Nombre completo *</label><input type="text" id="cand-nombre" placeholder="Ej: Juan Pérez"></div>
     <div class="ev-field"><label>Email</label><input type="email" id="cand-email" placeholder="juan@email.com"></div>
-    <div class="ev-field"><label>Telefono</label><input type="text" id="cand-tel" placeholder="+54 11 1234-5678"></div>
+    <div class="ev-field"><label>Teléfono (WhatsApp)</label><input type="text" id="cand-tel" placeholder="+54 11 1234-5678"></div>
+    <div class="ev-field"><label>CV (PDF o Word)</label><input type="file" id="cand-cv" accept=".pdf,.doc,.docx" style="color:var(--text1);font-size:13px"></div>
     <div class="ev-field"><label>Notas</label><textarea id="cand-notas" rows="2" placeholder="Observaciones del candidato..."></textarea></div>
     <div class="msg msg-error" id="cand-error"></div>
     <div class="msg msg-ok" id="cand-ok"></div>
@@ -753,6 +754,10 @@ function renderCandidatos(candidatos) {
       '<div class="candidato-actions">' +
         '<button class="btn-accion" onclick="verCandidato(decodeURIComponent(\''+cd+'\'))">Ver informe</button>' +
         '<button class="btn-accion btn-accion-green" onclick="abrirNuevoEvento(\''+nombre+'\',\''+puesto+'\')">Agendar</button>' +
+        (c.telefono ? '<button class="btn-accion" style="background:#25D366;color:#fff" onclick="abrirWhatsApp(\''+c.telefono+'\')">💬 WhatsApp</button>' : '') +
+        '<button class="btn-accion" onclick="subirCVCandidato('+c.id+',\''+nombre+'\')" title="Subir CV">📄 CV</button>' +
+        (c.cv_nombre ? '<button class="btn-accion" onclick="descargarCV('+c.id+')">⬇ Descargar CV</button>' : '') +
+        '<button class="btn-accion" style="background:var(--primary);color:#fff" onclick="generarInformeWord('+c.id+',\''+nombre+'\',decodeURIComponent(\''+cd+'\'  ))">📝 Informe Word</button>' +
         '<select class="estado-select" onchange="cambiarEstado('+c.id+',this.value)" onclick="event.stopPropagation()">'+estadoOpts+'</select>' +
         '<button class="btn-accion btn-accion-danger" onclick="confirmarEliminar('+c.id+',\''+nombre+'\')">Eliminar</button>' +
       '</div></div>';
@@ -807,6 +812,125 @@ function verCandidato(jsonStr) {
 }
 function cerrarModal(e){ if(!e||e.target===document.getElementById('modal')) document.getElementById('modal').classList.remove('visible'); }
 
+// ===== WHATSAPP =====
+function abrirWhatsApp(telefono) {
+  var numero = telefono.replace(/[^0-9+]/g, '');
+  // Si empieza con 0, quitamos el 0 y agregamos +54
+  if (numero.startsWith('0')) numero = '+54' + numero.substring(1);
+  // Si no tiene código de país, asumimos Argentina
+  if (!numero.startsWith('+')) numero = '+54' + numero;
+  window.open('https://wa.me/' + numero.replace('+', ''), '_blank');
+}
+
+// ===== SUBIR CV =====
+function subirCVCandidato(id, nombre) {
+  var input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.pdf,.doc,.docx';
+  input.onchange = async function() {
+    var file = input.files[0];
+    if (!file) return;
+    var reader = new FileReader();
+    reader.onload = async function(e) {
+      try {
+        var res = await fetch(API + '/candidatos/' + id + '/cv', {
+          method: 'PATCH',
+          headers: headersAuth(),
+          body: JSON.stringify({ cv_base64: e.target.result, cv_nombre: file.name })
+        });
+        var data = await res.json();
+        if (!res.ok) throw new Error(data.error);
+        alert('CV de ' + nombre + ' guardado correctamente.');
+        verDetalle(vacanteActualId);
+      } catch(err) {
+        alert('Error al subir el CV: ' + err.message);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+  input.click();
+}
+
+// ===== DESCARGAR CV =====
+function descargarCV(id) {
+  var link = document.createElement('a');
+  link.href = API + '/candidatos/' + id + '/cv';
+  link.setAttribute('download', '');
+  // Para endpoints con auth, hacemos fetch manual
+  fetch(API + '/candidatos/' + id + '/cv', { headers: headersAuth() })
+    .then(function(r) {
+      if (!r.ok) throw new Error('CV no encontrado');
+      var disposition = r.headers.get('Content-Disposition') || '';
+      var match = disposition.match(/filename="?([^"]+)"?/);
+      var filename = match ? match[1] : 'cv';
+      return r.blob().then(function(blob) { return { blob, filename }; });
+    })
+    .then(function(d) {
+      var url = URL.createObjectURL(d.blob);
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = d.filename;
+      a.click();
+      URL.revokeObjectURL(url);
+    })
+    .catch(function(e) { alert('Error al descargar: ' + e.message); });
+}
+
+// ===== INFORME WORD =====
+async function generarInformeWord(id, nombre, jsonStr) {
+  var btn = event.target;
+  btn.disabled = true;
+  btn.textContent = 'Generando...';
+  try {
+    var res = await fetch(API + '/candidatos/' + id + '/informe-word', {
+      method: 'POST',
+      headers: headersAuth()
+    });
+    var data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Error al generar');
+
+    // Generamos un .txt con formato que el usuario puede copiar a Word
+    // o descargamos como .html para abrir en Word
+    var html = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+  body { font-family: Calibri, Arial, sans-serif; margin: 60px; color: #222; line-height: 1.6; }
+  h1 { color: #1a5276; font-size: 22px; border-bottom: 2px solid #1a5276; padding-bottom: 8px; }
+  h2 { color: #2e86c1; font-size: 16px; margin-top: 28px; }
+  .meta { background: #f0f4f8; padding: 12px 16px; border-radius: 6px; font-size: 13px; margin-bottom: 20px; }
+  p { margin: 8px 0; text-align: justify; }
+</style>
+</head>
+<body>
+<h1>Informe de Selección — ${data.candidato}</h1>
+<div class="meta">
+  <strong>Puesto:</strong> ${data.puesto}<br>
+  <strong>Fecha de generación:</strong> ${new Date().toLocaleDateString('es-AR')}
+</div>
+${data.informe.split('\n').map(function(l) {
+  if (l.match(/^\d+\./)) return '<h2>' + l + '</h2>';
+  if (l.trim() === '') return '';
+  return '<p>' + l + '</p>';
+}).join('')}
+</body>
+</html>`;
+
+    var blob = new Blob([html], { type: 'application/msword' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = 'Informe_' + nombre.replace(/ /g,'_') + '.doc';
+    a.click();
+    URL.revokeObjectURL(url);
+  } catch(e) {
+    alert('Error al generar el informe: ' + e.message);
+  }
+  btn.disabled = false;
+  btn.textContent = '📝 Informe Word';
+}
+
 // CANDIDATO MANUAL
 var puestoActual = '';
 var vacanteActualId = null;
@@ -826,6 +950,7 @@ function abrirAgregarCandidato() {
 
 function cerrarAgregarCandidato() {
   document.getElementById('candidato-overlay').classList.remove('visible');
+  document.getElementById('cand-cv').value = '';
 }
 
 async function guardarCandidatoManual() {
@@ -841,6 +966,21 @@ async function guardarCandidatoManual() {
   btn.disabled = true; btn.textContent = 'Guardando...';
 
   try {
+    var email = document.getElementById('cand-email').value.trim();
+    var tel = document.getElementById('cand-tel').value.trim();
+    var cvFile = document.getElementById('cand-cv').files[0];
+    var cv_base64 = null, cv_nombre = null;
+
+    if (cvFile) {
+      cv_base64 = await new Promise(function(resolve, reject) {
+        var reader = new FileReader();
+        reader.onload = function(e) { resolve(e.target.result); };
+        reader.onerror = reject;
+        reader.readAsDataURL(cvFile);
+      });
+      cv_nombre = cvFile.name;
+    }
+
     var res = await fetch(API + '/candidatos', {
       method: 'POST',
       headers: headersAuth(),
@@ -848,7 +988,11 @@ async function guardarCandidatoManual() {
         vacante_id: vacanteActualId,
         puesto: puestoActual,
         nombre_candidato: nombre,
-        informe: notas || undefined
+        informe: notas || undefined,
+        email: email || undefined,
+        telefono: tel || undefined,
+        cv_base64: cv_base64 || undefined,
+        cv_nombre: cv_nombre || undefined
       })
     });
     var data = await res.json();
@@ -1139,3 +1283,4 @@ function copiar(id) {
 </script>
 </body>
 </html>
+
